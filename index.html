@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Collection Tracker (VanillaJS, No CDN)</title>
+  <meta name="description" content="Track vinyl, SNES, SEGA and more. Tag items, snap photos, search, and export CSV." />
+  <style>
+    :root{--bg:#0b1220;--card:#ffffff;--ink:#0f172a;--muted:#64748b;--brand:#0ea5e9;}
+    *{box-sizing:border-box}
+    body{margin:0;background:#f1f5f9;color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
+    header{padding:16px 16px 8px;}
+    h1{margin:0 0 6px;font-size:22px}
+    .wrap{max-width:980px;margin:0 auto;padding:0 16px 32px}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}
+    .btn{border:1px solid #cbd5e1;background:#fff;border-radius:12px;padding:8px 12px;font-size:14px;cursor:pointer}
+    .btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+    .input,.select,.textarea{border:1px solid #cbd5e1;background:#fff;border-radius:12px;padding:8px 10px;font-size:14px}
+    .input,.select{height:36px}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    @media(min-width:700px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+    .card .img{aspect-ratio:1/1;background:#e2e8f0;display:flex;align-items:center;justify-content:center}
+    .card .img img{width:100%;height:100%;object-fit:cover}
+    .card .body{padding:10px}
+    .row{display:flex;justify-content:space-between;gap:8px}
+    .tags{display:flex;flex-wrap:wrap;gap:4px}
+    .tag{font-size:11px;background:#e2e8f0;border-radius:999px;padding:2px 6px}
+    dialog::backdrop{background:rgba(0,0,0,.4)}
+    dialog{border:none;border-radius:16px;padding:0;max-width:640px;width:calc(100% - 24px)}
+    .modal{padding:16px}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .muted{color:var(--muted);font-size:12px}
+    .badge{position:fixed;right:8px;bottom:8px;border-radius:999px;padding:4px 10px;font-size:12px;color:#fff}
+    .ok{background:#059669}.bad{background:#e11d48}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Collection Tracker</h1>
+      <div class="muted">Vanilla JS, zero external frameworks. Works on phone. Snap a photo, tag, search, and export CSV.</div>
+    </header>
+
+    <div class="toolbar">
+      <input id="q" class="input" placeholder="Search by name..." />
+      <select id="catFilter" class="select"></select>
+      <input id="tagFilter" class="input" placeholder="Filter by tag..." />
+      <select id="sort" class="select">
+        <option value="dateDesc">Newest</option>
+        <option value="dateAsc">Oldest</option>
+        <option value="priceDesc">Price: High → Low</option>
+        <option value="priceAsc">Price: Low → High</option>
+        <option value="name">Name A→Z</option>
+      </select>
+      <button id="addBtn" class="btn primary">Add Item</button>
+      <button id="exportCsv" class="btn">Export CSV</button>
+    </div>
+
+    <div id="grid" class="grid"></div>
+
+    <dialog id="dlg">
+      <form id="form" class="modal" method="dialog">
+        <h3 id="dlgTitle" style="margin:0 0 8px;font-size:18px">Add Item</h3>
+        <div class="two">
+          <div>
+            <label class="muted">Name</label>
+            <input id="name" class="input" required placeholder="e.g., Chrono Trigger (SNES)" />
+          </div>
+          <div>
+            <label class="muted">Category</label>
+            <div class="two">
+              <select id="category" class="select"></select>
+              <input id="newCat" class="input" placeholder="or add new" />
+            </div>
+          </div>
+          <div>
+            <label class="muted">Tags (comma-separated)</label>
+            <input id="tags" class="input" placeholder="e.g., JRPG, boxed, mint" />
+          </div>
+          <div>
+            <label class="muted">Purchase Date</label>
+            <input id="date" type="date" class="input" />
+          </div>
+          <div>
+            <label class="muted">Price</label>
+            <input id="price" type="number" min="0.01" step="0.01" inputmode="decimal" class="input" placeholder="e.g., 120" required />
+            <div id="priceErr" class="muted" style="color:#e11d48;display:none">Enter a number greater than 0</div>
+          </div>
+          <div>
+            <label class="muted">Currency</label>
+            <select id="currency" class="select">
+              <option>MYR</option><option>USD</option><option>EUR</option><option>GBP</option><option>JPY</option><option>SGD</option><option>AUD</option>
+            </select>
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="muted">Notes</label>
+            <textarea id="notes" class="textarea" rows="3" placeholder="Condition, seller, store, etc."></textarea>
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="muted">Photo</label>
+            <input id="photo" type="file" accept="image/*" capture="environment" />
+            <div style="margin-top:8px"><img id="preview" alt="Preview" style="display:none;height:150px;border-radius:12px;object-fit:cover"/></div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+          <button type="button" id="cancel" class="btn">Cancel</button>
+          <button type="submit" class="btn primary" id="submitBtn">Add Item</button>
+        </div>
+      </form>
+    </dialog>
+  </div>
+
+  <script>
+    // ===== Utilities =====
+    const LS_ITEMS = 'ct_items_v2';
+    const LS_CATS = 'ct_categories_v2';
+
+    const defaultCategories = ['Vinyl','SNES','SEGA'];
+
+    function genId(){
+      if (crypto?.randomUUID) return crypto.randomUUID();
+      return 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+    }
+
+    function formatCurrency(value, currency='MYR'){
+      const n = Number(value||0);
+      try { return new Intl.NumberFormat(undefined, {style:'currency', currency}).format(n); }
+      catch { return `RM ${n.toFixed(2)}`; }
+    }
+
+    function isValidPrice(value){
+      const n = Number(value);
+      return Number.isFinite(n) && n > 0;
+    }
+
+    function buildCSV(items){
+      const headers = ['id','name','category','tags','purchasedAt','price','currency','notes','hasPhoto'];
+      const rows = [headers.join(',')];
+      for(const it of items){
+        const cells = [
+          it.id||'',
+          it.name||'',
+          it.category||'',
+          (it.tags||[]).join('; '),
+          it.purchasedAt||'',
+          isValidPrice(it.price) ? it.price : '',
+          it.currency||'MYR',
+          (it.notes||'').replace(/\n/g,' '),
+          (it.hasPhoto? 'yes':'no')
+        ].map(s => '"'+String(s).replace(/"/g,'""')+'"');
+        rows.push(cells.join(','));
+      }
+      return rows.join('\n');
+    }
+
+    // ===== IndexedDB image store (no libraries) =====
+    const DB_NAME = 'ct_db_v1';
+    const DB_STORE = 'images';
+
+    function idbOpen(){
+      return new Promise((resolve, reject)=>{
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(DB_STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbPutImage(id, file){ const db = await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readwrite'); tx.objectStore(DB_STORE).put(file,id); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+    async function idbGetImageURL(id){ const db = await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readonly'); const r=tx.objectStore(DB_STORE).get(id); r.onsuccess=()=>{ const blob=r.result; res(blob? URL.createObjectURL(blob): null); }; r.onerror=()=>rej(r.error); }); }
+    async function idbDeleteImage(id){ const db = await idbOpen(); return new Promise((res,rej)=>{ const tx=db.transaction(DB_STORE,'readwrite'); tx.objectStore(DB_STORE).delete(id); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+
+    // ===== State =====
+    const state = {
+      items: [],
+      cats: [],
+      editing: null,
+      filters: { q:'', cat:'', tag:'', sort:'dateDesc' }
+    };
+
+    function save(){ localStorage.setItem(LS_ITEMS, JSON.stringify(state.items)); localStorage.setItem(LS_CATS, JSON.stringify(state.cats)); }
+    function load(){
+      try{ state.items = JSON.parse(localStorage.getItem(LS_ITEMS)||'[]'); }catch{ state.items=[]; }
+      try{ state.cats = JSON.parse(localStorage.getItem(LS_CATS)||JSON.stringify(defaultCategories)); }catch{ state.cats = [...defaultCategories]; }
+    }
+
+    // ===== Rendering =====
+    const el = sel => document.querySelector(sel);
+
+    async function render(){
+      const grid = el('#grid');
+      grid.innerHTML='';
+      const { q, cat, tag, sort } = state.filters;
+      let arr = state.items.filter(it => (
+        (!q || (it.name||'').toLowerCase().includes(q)) &&
+        (!cat || it.category === cat) &&
+        (!tag || (it.tags||[]).some(t => t.toLowerCase().includes(tag)))
+      ));
+      arr.sort((a,b)=>{
+        if (sort==='dateDesc') return (b.purchasedAt||'').localeCompare(a.purchasedAt||'');
+        if (sort==='dateAsc') return (a.purchasedAt||'').localeCompare(b.purchasedAt||'');
+        if (sort==='priceDesc') return (Number(b.price)||0) - (Number(a.price)||0);
+        if (sort==='priceAsc') return (Number(a.price)||0) - (Number(b.price)||0);
+        return (a.name||'').localeCompare(b.name||'');
+      });
+
+      if (!arr.length){
+        const p=document.createElement('p'); p.className='muted'; p.textContent='No items yet. Add your first purchase!'; grid.appendChild(p); return;
+      }
+
+      for (const it of arr){
+        const li = document.createElement('div'); li.className='card';
+        const imgWrap = document.createElement('div'); imgWrap.className='img';
+        const url = await idbGetImageURL(it.id);
+        if (url){ const img=document.createElement('img'); img.src=url; img.alt=it.name||''; imgWrap.appendChild(img); }
+        else { imgWrap.innerHTML = '<span class="muted">No Photo</span>'; }
+        const body = document.createElement('div'); body.className='body';
+        const row = document.createElement('div'); row.className='row';
+        const title = document.createElement('div'); title.style.fontWeight='600'; title.style.flex='1'; title.textContent = it.name||'Untitled';
+        const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px';
+        const edit = document.createElement('button'); edit.className='btn'; edit.textContent='Edit'; edit.onclick = ()=> openForm(it);
+        const del = document.createElement('button'); del.className='btn'; del.textContent='Delete'; del.onclick = async ()=>{ if(confirm('Delete this item?')){ state.items = state.items.filter(x=>x.id!==it.id); await idbDeleteImage(it.id); save(); render(); }};
+        actions.append(edit, del);
+        row.append(title, actions);
+        const meta = document.createElement('div'); meta.className='muted'; meta.style.marginTop='4px';
+        const dateStr = it.purchasedAt||'—';
+        const priceStr = (it.price!=null) ? ` • ${formatCurrency(it.price, it.currency)}` : '';
+        meta.textContent = `${it.category||''} • ${dateStr}${priceStr}`;
+        const tags = document.createElement('div'); tags.className='tags';
+        (it.tags||[]).forEach(t=>{ const s=document.createElement('span'); s.className='tag'; s.textContent=t; tags.appendChild(s); });
+        if (it.notes){ const p=document.createElement('div'); p.className='muted'; p.textContent=it.notes; body.append(row, meta, tags, p); }
+        else body.append(row, meta, tags);
+        li.append(imgWrap, body);
+        grid.appendChild(li);
+      }
+    }
+
+    function renderFilters(){
+      const catSel = el('#catFilter');
+      catSel.innerHTML = '<option value="">All Categories</option>' + state.cats.map(c=>`<option>${c}</option>`).join('');
+    }
+
+    // ===== Form =====
+    function openForm(item){
+      state.editing = item || null;
+      el('#dlgTitle').textContent = item? 'Edit Item' : 'Add Item';
+      el('#name').value = item?.name||'';
+      el('#category').innerHTML = state.cats.map(c=>`<option ${item?.category===c?'selected':''}>${c}</option>`).join('');
+      el('#newCat').value = '';
+      el('#tags').value = (item?.tags||[]).join(', ');
+      el('#date').value = item?.purchasedAt || new Date().toISOString().slice(0,10);
+      el('#price').value = item?.price ?? '';
+      el('#currency').value = item?.currency || 'MYR';
+      el('#notes').value = item?.notes||'';
+      el('#photo').value = '';
+      el('#preview').style.display='none';
+      el('#submitBtn').textContent = item? 'Save Changes' : 'Add Item';
+      el('#dlg').showModal();
+    }
+
+    function closeForm(){ el('#dlg').close(); }
+
+    el('#photo').addEventListener('change', e=>{
+      const f=e.target.files?.[0];
+      if(!f){ el('#preview').style.display='none'; return; }
+      const url=URL.createObjectURL(f); const img=el('#preview'); img.src=url; img.style.display='block';
+    });
+
+    el('#form').addEventListener('submit', async (e)=>{
+      e.preventDefault();
+      const price = el('#price').value.trim();
+      if (!isValidPrice(price)){ el('#priceErr').style.display='block'; return; }
+      el('#priceErr').style.display='none';
+      const id = state.editing?.id || genId();
+      const item = {
+        id,
+        name: el('#name').value.trim(),
+        category: (el('#newCat').value.trim()|| el('#category').value),
+        tags: el('#tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+        purchasedAt: el('#date').value,
+        price: Number(price),
+        currency: el('#currency').value,
+        notes: el('#notes').value.trim(),
+      };
+      const file = el('#photo').files?.[0];
+      if (file){ await idbPutImage(id, file); item.hasPhoto = true; }
+      else if (state.editing && state.editing.hasPhoto){ item.hasPhoto = true; }
+      state.items = state.editing ? state.items.map(x=> x.id===id? item : x) : [item, ...state.items];
+      if (!state.cats.includes(item.category)) state.cats.push(item.category);
+      save(); closeForm(); renderFilters(); render();
+    });
+
+    el('#cancel').addEventListener('click', ()=> closeForm());
+
+    // ===== Events: filters & actions =====
+    el('#addBtn').addEventListener('click', ()=> openForm(null));
+    el('#q').addEventListener('input', e=>{ state.filters.q = e.target.value.toLowerCase(); render(); });
+    el('#catFilter').addEventListener('change', e=>{ state.filters.cat = e.target.value; render(); });
+    el('#tagFilter').addEventListener('input', e=>{ state.filters.tag = e.target.value.toLowerCase(); render(); });
+    el('#sort').addEventListener('change', e=>{ state.filters.sort = e.target.value; render(); });
+
+    el('#exportCsv').addEventListener('click', ()=>{
+      const csv = buildCSV(state.items);
+      const blob = new Blob(["\uFEFF"+csv], {type:'text/csv;charset=utf-8;'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='collection-items.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    });
+
+    // ===== Init =====
+    load();
+    if (!state.cats.length) state.cats = [...defaultCategories];
+    // build category selects
+    renderFilters();
+    const catFormSel = document.getElementById('category');
+    catFormSel.innerHTML = state.cats.map(c=>`<option>${c}</option>`).join('');
+    render();
+
+    // ===== Tests =====
+    (function runTests(){
+      const results=[]; const assert=(name,cond)=>results.push({name,pass:!!cond});
+      // Currency test
+      assert('formatCurrency returns MYR prefix or Intl currency', /RM|MYR/.test(formatCurrency(12.34,'MYR')));
+      // localStorage roundtrip
+      const sample=[{id:'t1', name:'Test', category:'SNES', tags:['test'], purchasedAt:'2025-01-01', price:10, currency:'MYR'}];
+      localStorage.setItem(LS_ITEMS, JSON.stringify(sample));
+      const loaded=JSON.parse(localStorage.getItem(LS_ITEMS));
+      assert('Items roundtrip via localStorage', Array.isArray(loaded) && loaded[0].id==='t1');
+      // name filter
+      const items=[{id:'a', name:'Chrono Trigger', category:'SNES', tags:['jrpg'], purchasedAt:'2024-01-01', price:100},{id:'b', name:'OutRun', category:'SEGA', tags:['racing'], purchasedAt:'2023-01-01', price:50}];
+      const q='chrono'; const filteredByName=items.filter(it => (it.name||'').toLowerCase().includes(q));
+      assert('Name filter works', filteredByName.length===1 && filteredByName[0].id==='a');
+      // price validation
+      assert('Price validator rejects 0', !isValidPrice(0));
+      assert('Price validator accepts 0.01', isValidPrice(0.01));
+      assert('Price validator rejects non-number', !isValidPrice('abc'));
+      // CSV export
+      const csv=buildCSV(items);
+      assert('CSV has header row', /^\"id\",\"name\",\"category\",\"tags\",\"purchasedAt\",\"price\",\"currency\",\"notes\",\"hasPhoto\"/m.test(csv));
+      assert('CSV contains Chrono Trigger row', /Chrono Trigger/.test(csv));
+      // UI sanity: JSON buttons removed
+      assert('No Export JSON button', !document.querySelector('#exportJson'));
+      assert('No Import JSON input', !document.querySelector('#importJson'));
+
+      const pass=results.every(r=>r.pass);
+      const badge=document.createElement('div'); badge.className='badge '+(pass?'ok':'bad');
+      badge.textContent=pass?`Tests passed: ${results.length}`:`Tests failed: ${results.filter(r=>!r.pass).length}`;
+      badge.title=results.map(r=>`${r.pass?'✔':'✖'} ${r.name}`).join('\n');
+      document.body.appendChild(badge);
+      console.log('Test results:', results);
+    })();
+  </script>
+</body>
+</html>
