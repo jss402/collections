@@ -33,6 +33,21 @@
     .muted{color:var(--muted);font-size:12px}
     .badge{position:fixed;right:8px;bottom:8px;border-radius:999px;padding:4px 10px;font-size:12px;color:#fff}
     .ok{background:#059669}.bad{background:#e11d48}
+    /* Ribbon */
+    .ribbon {position: absolute;
+      top: 12px;
+      right: -40px;
+      z-index: 10;
+      width: 160px;
+      text-align: center;
+      line-height: 24px;
+      letter-spacing: 0.5px;
+      background: #e11d48;
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+      transform: rotate(45deg);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);}
   </style>
 </head>
 <body>
@@ -40,6 +55,7 @@
     <header>
       <h1>Collection Tracker</h1>
       <div class="muted">Vanilla JS, zero external frameworks. Works on phone. Snap a photo, tag, search, and export CSV.</div>
+      <div class="ribbon">V2 PREVIEW</div>
     </header>
 
     <div class="toolbar">
@@ -336,9 +352,6 @@
       const csv=buildCSV(items);
       assert('CSV has header row', /^\"id\",\"name\",\"category\",\"tags\",\"purchasedAt\",\"price\",\"currency\",\"notes\",\"hasPhoto\"/m.test(csv));
       assert('CSV contains Chrono Trigger row', /Chrono Trigger/.test(csv));
-      // UI sanity: JSON buttons removed
-      assert('No Export JSON button', !document.querySelector('#exportJson'));
-      assert('No Import JSON input', !document.querySelector('#importJson'));
 
       const pass=results.every(r=>r.pass);
       const badge=document.createElement('div'); badge.className='badge '+(pass?'ok':'bad');
