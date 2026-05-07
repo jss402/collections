@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Receipts">
+  <title>Receipt Scanner</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ====== Setup Screen ====== -->
+  <div id="screen-setup" class="screen">
+    <div class="screen-content">
+      <header class="center-header">
+        <div class="app-icon" aria-hidden="true"></div>
+        <h1>Receipt Scanner</h1>
+        <p class="subtitle">One-time setup required</p>
+      </header>
+      <main>
+        <div class="card setup-instructions">
+          <h2>Google Cloud Setup</h2>
+          <ol>
+            <li>Go to <strong>console.cloud.google.com</strong> and create a project</li>
+            <li>Search for and enable the <strong>Google Drive API</strong></li>
+            <li>Go to <strong>Credentials &rarr; Create OAuth 2.0 Client ID</strong> (Web application type)</li>
+            <li>Under <strong>Authorized JavaScript origins</strong>, add:<br>
+              <code id="origin-display" class="origin-chip">loading&hellip;</code>
+            </li>
+            <li>Copy the <strong>Client ID</strong> and paste it below</li>
+          </ol>
+        </div>
+        <div class="form-group">
+          <label for="client-id-input">OAuth Client ID</label>
+          <input type="text" id="client-id-input"
+            placeholder="xxxxxxxx.apps.googleusercontent.com"
+            autocomplete="off" autocapitalize="none" spellcheck="false">
+        </div>
+        <button class="btn btn-primary btn-full" id="save-client-id-btn">Save &amp; Continue</button>
+      </main>
+    </div>
+  </div>
+
+  <!-- ====== Auth Screen ====== -->
+  <div id="screen-auth" class="screen hidden">
+    <div class="screen-content">
+      <header class="center-header">
+        <div class="app-icon" aria-hidden="true"></div>
+        <h1>Receipt Scanner</h1>
+        <p class="subtitle">Sign in to get started</p>
+      </header>
+      <main>
+        <button class="btn btn-primary btn-full" id="sign-in-btn">
+          <span class="google-icon" aria-hidden="true">G</span>
+          Sign in with Google
+        </button>
+        <p id="auth-error" class="error-text hidden" role="alert"></p>
+        <p class="hint">Only accesses files this app creates in your Drive.</p>
+        <button class="btn btn-ghost" id="change-client-id-btn">Change Client ID</button>
+      </main>
+    </div>
+  </div>
+
+  <!-- ====== Main Screen ====== -->
+  <div id="screen-main" class="screen hidden">
+    <header class="top-bar">
+      <span class="app-name">Receipt Scanner</span>
+      <div class="user-row">
+        <span id="user-email" class="user-email"></span>
+        <button class="btn-icon" id="sign-out-btn" aria-label="Sign out">&#x2715;</button>
+      </div>
+    </header>
+
+    <div class="screen-content main-content">
+
+      <!-- Idle -->
+      <div id="state-idle" class="state">
+        <div class="hero-scan">
+          <div class="scan-icon-wrap">
+            <svg viewBox="0 0 64 64" class="scan-icon" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="12" y="8" width="40" height="48" rx="4" stroke-width="3"/>
+              <line x1="20" y1="24" x2="44" y2="24" stroke-width="2.5"/>
+              <line x1="20" y1="32" x2="44" y2="32" stroke-width="2.5"/>
+              <line x1="20" y1="40" x2="34" y2="40" stroke-width="2.5"/>
+              <polyline points="12,52 18,46 24,52 30,46 36,52 42,46 48,52" stroke-width="2"/>
+            </svg>
+          </div>
+          <p class="scan-hint">Photograph a receipt to upload it to Google Drive</p>
+        </div>
+        <button class="btn btn-primary btn-large btn-full" id="scan-btn">
+          <svg viewBox="0 0 24 24" class="btn-icon-svg" aria-hidden="true" fill="none" stroke="currentColor">
+            <circle cx="12" cy="13" r="3" stroke-width="2"/>
+            <path d="M20 5h-3.2L15 3H9L7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z" stroke-width="1.8"/>
+          </svg>
+          Scan Receipt
+        </button>
+        <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" aria-hidden="true">
+      </div>
+
+      <!-- Preview + OCR + Fields -->
+      <div id="state-preview" class="state hidden">
+        <div class="preview-wrap">
+          <img id="preview-img" alt="Receipt preview" class="preview-img">
+        </div>
+
+        <div id="ocr-status" class="status-row" role="status" aria-live="polite">
+          <div class="spinner" aria-hidden="true"></div>
+          <span id="ocr-status-text">Analyzing receipt&hellip;</span>
+        </div>
+
+        <div id="fields-form" class="card hidden">
+          <h2 class="section-title">Receipt Details</h2>
+          <p class="fields-hint">Review and correct the extracted information before uploading:</p>
+          <div class="form-group">
+            <label for="field-store">Store / Merchant</label>
+            <input type="text" id="field-store" placeholder="e.g. Walmart" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="field-date">Date on Receipt</label>
+            <input type="text" id="field-date" placeholder="e.g. 2026-05-06" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label for="field-total">Total Amount</label>
+            <input type="text" id="field-total" placeholder="e.g. 47.83" inputmode="decimal" autocomplete="off">
+          </div>
+        </div>
+
+        <div id="upload-status" class="status-row hidden" role="status" aria-live="polite">
+          <div class="spinner" aria-hidden="true"></div>
+          <span id="upload-status-text">Uploading&hellip;</span>
+        </div>
+
+        <div class="action-row" id="action-buttons">
+          <button class="btn btn-secondary" id="cancel-btn">Cancel</button>
+          <button class="btn btn-primary" id="upload-btn" disabled>Upload to Drive</button>
+        </div>
+      </div>
+
+      <!-- Success -->
+      <div id="state-success" class="state hidden">
+        <div class="result-card">
+          <div class="result-icon result-icon--success" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 6L9 17l-5-5" stroke-width="2.5"/>
+            </svg>
+          </div>
+          <h2>Uploaded!</h2>
+          <p id="success-filename" class="result-detail"></p>
+          <p id="success-folder" class="result-detail result-detail--muted"></p>
+          <a id="success-link" class="btn btn-primary btn-full" target="_blank" rel="noopener noreferrer">View in Drive</a>
+          <button class="btn btn-secondary btn-full" id="scan-another-btn">Scan Another Receipt</button>
+        </div>
+      </div>
+
+      <!-- Error -->
+      <div id="state-error" class="state hidden">
+        <div class="result-card">
+          <div class="result-icon result-icon--error" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round">
+              <path d="M10.3 3.5L2 19a1 1 0 0 0 .9 1.5h18.2a1 1 0 0 0 .9-1.5L13.7 3.5a2 2 0 0 0-3.4 0z" stroke-width="1.5"/>
+              <line x1="12" y1="9" x2="12" y2="13" stroke-width="2.5"/>
+              <circle cx="12" cy="17" r="0.5" stroke-width="2.5"/>
+            </svg>
+          </div>
+          <h2>Upload Failed</h2>
+          <p id="error-message" class="result-detail" role="alert"></p>
+          <button class="btn btn-primary btn-full" id="retry-btn">Try Again</button>
+          <button class="btn btn-ghost btn-full" id="cancel-from-error-btn">Start Over</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://unpkg.com/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
